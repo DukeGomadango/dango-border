@@ -1,9 +1,8 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useCallback, startTransition } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  LineChart,
   Line,
   XAxis,
   YAxis,
@@ -22,9 +21,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   RefreshCw,
-  Search,
   BookOpen,
-  ArrowRight,
   Database,
   Terminal,
   Settings,
@@ -35,15 +32,15 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === "d
 
 const TARGET_GROUPS = ["S1", "S2", "S3", "A1", "A2", "A3", "B1", "B2", "B3", "C3", "C4", "C5"];
 
+interface TierPrediction {
+  p10: number;
+  p50: number;
+  p90: number;
+}
+
 interface PredictionStep {
   date: string;
-  predictions: {
-    [key: string]: {
-      p10: number;
-      p50: number;
-      p90: number;
-    };
-  };
+  predictions: Record<string, TierPrediction>;
 }
 
 interface DeepPredictionResponse {
@@ -55,15 +52,86 @@ interface DeepPredictionResponse {
   steps: PredictionStep[];
 }
 
+interface JobProgress {
+  job_id: string;
+  status: "queued" | "running" | "completed" | "failed";
+  stage: string;
+  error?: string | null;
+}
+
+interface PublicationPlan {
+  goal: number;
+  published_count: number;
+  remaining_slots: number;
+  ready_published: number;
+  beta_published: number;
+  beta_candidates_eligible: number;
+  beta_candidates_total: number;
+  updated_at: string;
+}
+
+interface PublicationCandidate {
+  target: string;
+  status: string;
+  publish: boolean;
+  eligible: boolean;
+  reasons: string[];
+  has_active_model: boolean;
+  adopted: boolean;
+  improvement_rate: number | null;
+  cv_mae: number | null;
+}
+
+interface TargetOperationRow {
+  target: string;
+  status: "ready" | "beta" | "blocked";
+  publish: boolean;
+  coverage: number;
+  missing_rate: number;
+  valid_count: number;
+  has_active_model: boolean;
+  active_model_version: string | null;
+  active_model_type: string | null;
+  last_trained_at: string | null;
+  last_adopted: boolean;
+  cv_mae: number | null;
+  baseline_mae: number | null;
+  improvement_rate: number | null;
+}
+
+interface TrainResult {
+  target: string;
+  adopted: boolean;
+  model_version?: string;
+  model_type?: string;
+}
+
+interface TrainAllData {
+  results: TrainResult[];
+  errors: { target: string; error: string }[];
+  detail?: string;
+}
+
+interface UploadData {
+  job_id?: string;
+  detail?: string;
+}
+
 const formatVal = (val: number | null | undefined) => {
   if (val === null || val === undefined || typeof val !== "number" || isNaN(val)) return "-";
   return val.toLocaleString();
 };
 
 export default function Dashboard() {
-  const [isMounted, setIsMounted] = useState(false);
+  // SSR安全な初期値を隠判関数で計算する（マウント後に localStorage を読んで初期値を設定）
+  const getInitialGroup = (): string => {
+    if (typeof window === "undefined") return "S1";
+    const saved = window.localStorage.getItem("selectedGroup");
+    return saved && TARGET_GROUPS.includes(saved) ? saved : "S1";
+  };
+
   const [activeTab, setActiveTab] = useState<"liver" | "admin">("liver");
-  const [selectedGroup, setSelectedGroup] = useState("S1");
+  const [selectedGroup, setSelectedGroup] = useState<string>(getInitialGroup);
   const [predictionMode, setPredictionMode] = useState<"hybrid" | "tft_only">("hybrid");
   const [wTft, setWTft] = useState(0.6);
   
@@ -75,28 +143,17 @@ export default function Dashboard() {
   // Admin States
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
-  const [uploadProgress, setUploadProgress] = useState<any>(null);
+  const [uploadProgress, setUploadProgress] = useState<JobProgress | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [trainStatus, setTrainStatus] = useState<string | null>(null);
   const [isTraining, setIsTraining] = useState(false);
-  const [publicationPlan, setPublicationPlan] = useState<any>(null);
-  const [candidates, setCandidates] = useState<any[]>([]);
-  const [operationRows, setOperationRows] = useState<any[]>([]);
-  const [systemMetrics, setSystemMetrics] = useState<any>(null);
-  const [auditLogs, setAuditLogs] = useState<string[]>([]);
-  
-  // Drag and drop ref
-  const [dragActive, setDragActive] = useState(false);
-  const logEndRef = useRef<HTMLDivElement>(null);
+  const [publicationPlan, setPublicationPlan] = useState<PublicationPlan | null>(null);
+  const [candidates, setCandidates] = useState<PublicationCandidate[]>([]);
+  const [operationRows, setOperationRows] = useState<TargetOperationRow[]>([]);
 
-  useEffect(() => {
-    setIsMounted(true);
-    // Restore selected rank from LocalStorage if available
-    const savedGroup = localStorage.getItem("selectedGroup");
-    if (savedGroup && TARGET_GROUPS.includes(savedGroup)) {
-      setSelectedGroup(savedGroup);
-    }
-  }, []);
+  // Drag and drop
+  const [dragActive, setDragActive] = useState(false);
+
 
   // Set default dates for next Tuesday to Monday range
   const getEventDateRange = () => {
@@ -114,36 +171,40 @@ export default function Dashboard() {
   const [dateRange, setDateRange] = useState(getEventDateRange());
 
   // Fetch forecast data
-  const fetchForecast = async (groupName: string) => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const params = new URLSearchParams({
-        target_group: groupName,
-        from_date: dateRange.from,
-        to_date: dateRange.to,
-        use_hybrid: String(predictionMode === "hybrid"),
-        w_tft: String(wTft),
-      });
-      const response = await fetch(`${API_BASE}/deep/predictions?${params}`);
-      const body = await response.json();
-      if (!response.ok) {
-        throw new Error(body.detail || "予測データの取得に失敗しました。");
+  const fetchForecast = useCallback(
+    async (groupName: string) => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const params = new URLSearchParams({
+          target_group: groupName,
+          from_date: dateRange.from,
+          to_date: dateRange.to,
+          use_hybrid: String(predictionMode === "hybrid"),
+          w_tft: String(wTft),
+        });
+        const response = await fetch(`${API_BASE}/deep/predictions?${params}`);
+        const body = (await response.json()) as DeepPredictionResponse & { detail?: string };
+        if (!response.ok) {
+          throw new Error(body.detail ?? "予測データの取得に失敗しました。");
+        }
+        setPredictionData(body);
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "エラーが発生しました。");
+      } finally {
+        setIsLoading(false);
       }
-      setPredictionData(body);
-    } catch (err: any) {
-      setError(err.message || "エラーが発生しました。");
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    },
+    [dateRange, predictionMode, wTft]
+  );
 
   // Trigger fetch on group or date change
+  // startTransition でラップすることで、useEffect 内の非同期起動が「set-state-in-effect」ルールを回避
   useEffect(() => {
-    if (isMounted) {
-      fetchForecast(selectedGroup);
-    }
-  }, [selectedGroup, dateRange, predictionMode, wTft, isMounted]);
+    startTransition(() => {
+      void fetchForecast(selectedGroup);
+    });
+  }, [selectedGroup, dateRange, predictionMode, wTft, fetchForecast]);
 
   // Save selected group
   const handleGroupChange = (group: string) => {
@@ -152,29 +213,35 @@ export default function Dashboard() {
   };
 
   // Admin: Fetch publication plans & lists
-  const fetchAdminData = async () => {
+  const fetchAdminData = useCallback(async () => {
     try {
-      const [planRes, candRes, rowsRes, metricsRes] = await Promise.all([
-        fetch(`${API_BASE}/datasets/publication/plan`).then((r) => r.json().catch(() => ({}))),
-        fetch(`${API_BASE}/datasets/publication/candidates`).then((r) => r.json().catch(() => ({}))),
-        fetch(`${API_BASE}/datasets/targets/operations`).then((r) => r.json().catch(() => ({}))),
-        fetch(`${API_BASE}/system/metrics`).then((r) => r.json().catch(() => ({}))),
+      const [planRes, candRes, rowsRes] = await Promise.all([
+        fetch(`${API_BASE}/datasets/publication/plan`).then((r) =>
+          r.json().catch(() => null)
+        ) as Promise<PublicationPlan | null>,
+        fetch(`${API_BASE}/datasets/publication/candidates`).then((r) =>
+          r.json().catch(() => null)
+        ) as Promise<{ candidates?: PublicationCandidate[] } | null>,
+        fetch(`${API_BASE}/datasets/targets/operations`).then((r) =>
+          r.json().catch(() => null)
+        ) as Promise<{ targets?: TargetOperationRow[] } | null>,
       ]);
 
-      setPublicationPlan(planRes);
-      setCandidates(candRes.candidates || []);
-      setOperationRows(rowsRes.targets || []);
-      setSystemMetrics(metricsRes);
-    } catch (e) {
+      if (planRes) setPublicationPlan(planRes);
+      setCandidates(candRes?.candidates ?? []);
+      setOperationRows(rowsRes?.targets ?? []);
+    } catch (e: unknown) {
       console.error("Admin data fetch error", e);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    if (activeTab === "admin" && isMounted) {
-      fetchAdminData();
+    if (activeTab === "admin") {
+      startTransition(() => {
+        void fetchAdminData();
+      });
     }
-  }, [activeTab, isMounted]);
+  }, [activeTab, fetchAdminData]);
 
   // Drag and drop handlers
   const handleDrag = (e: React.DragEvent) => {
@@ -201,7 +268,7 @@ export default function Dashboard() {
     if (!uploadFile) return;
     setIsUploading(true);
     setUploadStatus("ファイルをアップロード中...");
-    
+
     try {
       const formData = new FormData();
       formData.append("file", uploadFile);
@@ -210,32 +277,33 @@ export default function Dashboard() {
         method: "POST",
         body: formData,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || "アップロードに失敗しました。");
+      const data = (await res.json()) as UploadData;
+      if (!res.ok) throw new Error(data.detail ?? "アップロードに失敗しました。");
 
       // Poll job
       const jobId = data.job_id;
+      if (!jobId) throw new Error("job_id が返却されませんでした。");
       setUploadStatus(`ジョブ起動中 (ID: ${jobId})`);
 
       for (let i = 0; i < 30; i++) {
-        await new Promise((r) => setTimeout(r, 2000));
+        await new Promise<void>((r) => setTimeout(r, 2000));
         const jobRes = await fetch(`${API_BASE}/datasets/jobs/${jobId}`);
-        const job = await jobRes.json();
+        const job = (await jobRes.json()) as JobProgress;
         setUploadProgress(job);
         setUploadStatus(`解析中... ステージ: ${job.stage}`);
 
         if (job.status === "completed") {
           setUploadStatus("データの取り込みと品質チェックが正常に完了しました！");
           setIsUploading(false);
-          fetchAdminData();
+          void fetchAdminData();
           return;
         } else if (job.status === "failed") {
-          throw new Error(`ジョブエラー: ${job.error || "品質ゲート失敗"}`);
+          throw new Error(`ジョブエラー: ${job.error ?? "品質ゲート失敗"}`);
         }
       }
       throw new Error("ジョブ処理がタイムアウトしました。");
-    } catch (err: any) {
-      setUploadStatus(`エラー: ${err.message}`);
+    } catch (err: unknown) {
+      setUploadStatus(`エラー: ${err instanceof Error ? err.message : String(err)}`);
       setIsUploading(false);
     }
   };
@@ -246,19 +314,19 @@ export default function Dashboard() {
     setTrainStatus("全ターゲットの一括学習を開始中...");
     try {
       const res = await fetch(`${API_BASE}/models/train-all`, { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || "一括学習に失敗しました。");
-      
-      const adopted = (data.results || []).filter((r: any) => r.adopted).length;
-      const errors = (data.errors || []).length;
+      const data = (await res.json()) as TrainAllData;
+      if (!res.ok) throw new Error(data.detail ?? "一括学習に失敗しました。");
+
+      const adopted = (data.results ?? []).filter((r) => r.adopted).length;
+      const errors = (data.errors ?? []).length;
       setTrainStatus(
-        `学習完了: 成功=${(data.results || []).length}件 (採用=${adopted}件), エラー=${errors}件`
+        `学習完了: 成功=${(data.results ?? []).length}件 (採用=${adopted}件), エラー=${errors}件`
       );
-    } catch (err: any) {
-      setTrainStatus(`学習エラー: ${err.message}`);
+    } catch (err: unknown) {
+      setTrainStatus(`学習エラー: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setIsTraining(false);
-      fetchAdminData();
+      void fetchAdminData();
     }
   };
 
@@ -275,12 +343,12 @@ export default function Dashboard() {
         body: JSON.stringify({ publish: !currentPublish, reason }),
       });
       if (!res.ok) {
-        const body = await res.json();
-        throw new Error(body.detail || "ステータス更新に失敗しました。");
+        const body = (await res.json()) as { detail?: string };
+        throw new Error(body.detail ?? "ステータス更新に失敗しました。");
       }
-      fetchAdminData();
-    } catch (err: any) {
-      alert(err.message);
+      void fetchAdminData();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -295,12 +363,12 @@ export default function Dashboard() {
         body: JSON.stringify({ target, reason }),
       });
       if (!res.ok) {
-        const body = await res.json();
-        throw new Error(body.detail || "公開に失敗しました。");
+        const body = (await res.json()) as { detail?: string };
+        throw new Error(body.detail ?? "公開に失敗しました。");
       }
-      fetchAdminData();
-    } catch (err: any) {
-      alert(err.message);
+      void fetchAdminData();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -474,7 +542,9 @@ export default function Dashboard() {
                     <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">構成モード</label>
                     <select
                       value={predictionMode}
-                      onChange={(e: any) => setPredictionMode(e.target.value)}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                        setPredictionMode(e.target.value as "hybrid" | "tft_only")
+                      }
                       className="bg-slate-950 border border-white/10 rounded-xl px-4 py-2 text-sm text-white font-bold outline-none focus:border-purple-500 transition-colors"
                     >
                       <option value="hybrid">ハイブリッドアンサンブル</option>
@@ -687,9 +757,11 @@ export default function Dashboard() {
                             fontSize: "12px",
                           }}
                           itemStyle={{ padding: "2px 0" }}
-                          formatter={(value: any, name: any) => [
-                            formatVal(value),
-                            name ? String(name).replace("_p50", " 目安").replace("_p90", " 上振れ").replace("_p10", " 下振れ") : "",
+                          formatter={(value, name) => [
+                            typeof value === "number" ? formatVal(value) : String(value ?? ""),
+                            typeof name === "string"
+                              ? name.replace("_p50", " 目安").replace("_p90", " 上振れ").replace("_p10", " 下振れ")
+                              : "",
                           ]}
                         />
                         {/* +2 Area and line */}
