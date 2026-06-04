@@ -120,7 +120,15 @@ def _run_inference(
             p50 = round(p50_raw * (t_max - t_min) + t_min, 2)
             p90 = round(p90_raw * (t_max - t_min) + t_min, 2)
 
-            tier_preds[tier] = {"p10": p10, "p50": p50, "p90": p90}
+            # Historical weekday mean
+            weekday_num = int(forecast_dates[t].weekday())
+            if "weekday_num" in df.columns and tier in df.columns:
+                hist_series = df[df["weekday_num"] == weekday_num][tier].dropna()
+                hist_mean = round(float(hist_series.mean()), 2) if not hist_series.empty else None
+            else:
+                hist_mean = None
+
+            tier_preds[tier] = {"p10": p10, "p50": p50, "p90": p90, "historical_mean": hist_mean}
 
         steps.append({
             "date": date_str,

@@ -102,7 +102,15 @@ def predict_hybrid(
             p50 = round(w_tft * t_p50 + (1 - w_tft) * l_p50, 2)
             p90 = round(w_tft * t_p90 + (1 - w_tft) * l_p90, 2)
 
-            tier_preds[tier] = {"p10": p10, "p50": p50, "p90": p90}
+            # Historical weekday mean
+            weekday_num = int(forecast_dates[t].weekday())
+            if "weekday_num" in df.columns and tier in df.columns:
+                hist_series = df[df["weekday_num"] == weekday_num][tier].dropna()
+                hist_mean = round(float(hist_series.mean()), 2) if not hist_series.empty else None
+            else:
+                hist_mean = None
+
+            tier_preds[tier] = {"p10": p10, "p50": p50, "p90": p90, "historical_mean": hist_mean}
 
         steps.append({
             "date": date_str,
@@ -139,13 +147,23 @@ def _format_lgbm_only(
         date_str = forecast_dates[t].strftime("%Y-%m-%d")
         event_day = ((forecast_dates[t].weekday() - 1) % 7) + 1
 
+        df = _cached_read_csv()
         tier_preds = {}
         for tier in tier_columns:
             lgbm_step = lgbm_preds[tier]["predictions"][t]
             p10 = lgbm_step["interval"]["p10"]
             p50 = lgbm_step["prediction"]
             p90 = lgbm_step["interval"]["p90"]
-            tier_preds[tier] = {"p10": p10, "p50": p50, "p90": p90}
+
+            # Historical weekday mean
+            weekday_num = int(forecast_dates[t].weekday())
+            if "weekday_num" in df.columns and tier in df.columns:
+                hist_series = df[df["weekday_num"] == weekday_num][tier].dropna()
+                hist_mean = round(float(hist_series.mean()), 2) if not hist_series.empty else None
+            else:
+                hist_mean = None
+
+            tier_preds[tier] = {"p10": p10, "p50": p50, "p90": p90, "historical_mean": hist_mean}
 
         steps.append({
             "date": date_str,

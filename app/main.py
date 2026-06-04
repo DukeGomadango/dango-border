@@ -1,9 +1,10 @@
 from contextlib import asynccontextmanager
+import os
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.datasets import router as datasets_router
@@ -34,7 +35,25 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="Border Analysis API", version="0.1.0", lifespan=lifespan)
+    is_prod = os.getenv("ENV", "development").lower() == "production"
+
+    app = FastAPI(
+        title="Border Analysis API",
+        version="0.1.0",
+        lifespan=lifespan,
+        docs_url=None if is_prod else "/docs",
+        redoc_url=None if is_prod else "/redoc",
+        openapi_url=None if is_prod else "/openapi.json",
+    )
+
+    if is_prod:
+        @app.middleware("http")
+        async def block_admin_endpoints(request: Request, call_next):
+            path = request.url.path
+            blocked_prefixes = ("/datasets", "/models", "/publication", "/deep/train")
+            if any(path.startswith(prefix) for prefix in blocked_prefixes):
+                return JSONResponse(status_code=404, content={"detail": "Not Found"})
+            return await call_next(request)
 
     # Next.js 開発サーバーからの通信を許可するCORS設定
     app.add_middleware(

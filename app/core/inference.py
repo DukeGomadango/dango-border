@@ -96,8 +96,10 @@ def predict_for_date_range(target: str, from_date: str, to_date: str) -> dict[st
     profile = normalize_profile(artifact.get("feature_profile", "step3"))
     
     # Retrieve the raw feature frame from cache to avoid rebuilding it from scratch (~50ms -> ~0ms)
-    feature_df = _cached_feature_frame_raw(target, profile)
+    feature_df = _cached_feature_frame_raw(target, profile).copy()
     feature_cols = artifact["feature_columns"]
+    # Safely impute historical NaNs for all feature columns (especially critical for linear models)
+    feature_df[feature_cols] = feature_df[feature_cols].ffill().bfill().fillna(0.0)
     model_type = artifact.get("model_type", "linear")
 
     # Pre-load booster or coefficients once

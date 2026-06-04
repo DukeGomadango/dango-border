@@ -36,10 +36,10 @@ _lgbm_store: dict[str, lgb.Booster] = {}
 
 # All groups that have a deep model directory available
 TARGET_GROUPS = [
-    "S1", "S2", "S3",
-    "A1", "A2", "A3",
-    "B1", "B2", "B3",
-    "C3", "C4", "C5",
+    "S3", "S2", "S1",
+    "A3", "A2", "A1",
+    "B3", "B2", "B1",
+    "C5", "C4", "C3",
 ]
 
 

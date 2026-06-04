@@ -235,6 +235,7 @@ class DeepTierPrediction(BaseModel):
     p10: float
     p50: float
     p90: float
+    historical_mean: float | None = None
 
 
 class DeepStepPrediction(BaseModel):
