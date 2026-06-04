@@ -1,0 +1,19 @@
+# Ignore Python virtual environment
+.venv/
+venv/
+
+# Ignore local storage, datasets, and models
+storage/
+raw-data.xlsx
+~$raw-data.xlsx
+target-readiness.csv
+
+# Ignore backend and scripts
+app/
+scripts/
+tests/
+.pytest_cache/
+
+# Ignore local config
+.env*
+!.env.example
