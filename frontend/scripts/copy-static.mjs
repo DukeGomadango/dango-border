@@ -5,6 +5,11 @@ import { join, dirname } from "node:path";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+if (process.env.VERCEL) {
+  console.log("Vercel deployment detected. Skipping static copy to backend.");
+  process.exit(0);
+}
+
 const src = join(__dirname, "../out");
 const dest = join(__dirname, "../../app/static");
 
