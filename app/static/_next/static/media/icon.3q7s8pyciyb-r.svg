@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <linearGradient id="bg-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4f46e5" />
+      <stop offset="50%" stop-color="#9333ea" />
+      <stop offset="100%" stop-color="#db2777" />
+    </linearGradient>
+    <linearGradient id="line-grad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.8" />
+      <stop offset="100%" stop-color="#ffffff" />
+    </linearGradient>
+  </defs>
+  <!-- Main icon background with rounded corners -->
+  <rect width="32" height="32" rx="9" fill="url(#bg-grad)" />
+  <!-- Glassmorphic highlight border -->
+  <rect x="1" y="1" width="30" height="30" rx="8" fill="#ffffff" fill-opacity="0.05" stroke="#ffffff" stroke-opacity="0.15" stroke-width="1" />
+  <!-- Trending Up Icon matching the dashboard brand -->
+  <path d="M8 22 L14 16 L18 20 L24 12" fill="none" stroke="url(#line-grad)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M19 12 H24 V17" fill="none" stroke="url(#line-grad)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+</svg>
