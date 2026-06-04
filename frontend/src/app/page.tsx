@@ -87,7 +87,7 @@ export default function Dashboard() {
           </div>
           <div>
             <h1 className="font-sans font-black tracking-tight text-lg leading-tight bg-gradient-to-r from-slate-900 dark:from-white via-slate-700 dark:via-slate-100 to-slate-500 dark:to-slate-300 bg-clip-text text-transparent">
-              Border Analysis
+              だんごボーダー
             </h1>
             <p className="text-[10px] text-slate-400 dark:text-slate-500 tracking-wider uppercase font-bold leading-none mt-0.5">
               IRIAM Rank Boundary Forecast
@@ -269,7 +269,7 @@ export default function Dashboard() {
       </main>
 
       <footer className="w-full border-t border-slate-200 dark:border-white/5 py-6 px-6 mt-12 text-center text-xs text-slate-500 dark:text-slate-500 font-mono z-10">
-        © 2026 Border Analysis. Created using Next.js, FastAPI & Recharts.
+        © 2026 だんごボーダー. Created using Next.js, FastAPI & Recharts.
       </footer>
 
       {/* Custom Dialog Modals and Toast Notifications */}

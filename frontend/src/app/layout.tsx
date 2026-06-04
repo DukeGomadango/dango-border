@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Border Analysis — IRIAMボーダー予測",
+  title: "だんごボーダー — IRIAMボーダー予測",
   description: "IRIAMのランクボーダー予測・監視ダッシュボード。下振れ・目安・上振れ予測をサポート。",
 };
 

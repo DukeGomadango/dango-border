@@ -1,4 +1,4 @@
-# Border Analysis API（MVP）
+# だんごボーダー — Border Analysis API（MVP）
 
 生データ（Excel/CSV）をアップロードし、任意ターゲットの学習・推論を行うバックエンド API です。
 
