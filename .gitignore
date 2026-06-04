@@ -1,0 +1,34 @@
+# Python virtual environment and caches
+.venv/
+.pytest_cache/
+__pycache__/
+*.pyc
+
+# Local data & storage files (ignore datasets and local artifacts)
+raw-data.xlsx
+~$raw-data.xlsx
+target-readiness.csv
+storage/
+
+# Frontend dependencies and build folders
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/.pnp
+frontend/.pnp.*
+frontend/.yarn/*
+!frontend/.yarn/patches
+!frontend/.yarn/plugins
+!frontend/.yarn/releases
+!frontend/.yarn/versions
+
+# IDEs & System
+.vscode/
+.DS_Store
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
