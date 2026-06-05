@@ -49,6 +49,7 @@ def build_feature_frame(df: pd.DataFrame, target: str, profile: str = "step3", d
     features["quarter"] = pd.to_numeric(df["quarter"], errors="coerce")
     features["is_month_start"] = pd.to_numeric(df["is_month_start"], errors="coerce")
     features["is_month_end"] = pd.to_numeric(df["is_month_end"], errors="coerce")
+    features["week_of_month"] = ((features["day"] - 1) // 7 + 1).astype(int)
 
     past = s.shift(1)
     features["lag_1"] = past

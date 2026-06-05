@@ -54,7 +54,7 @@ def _discover_target_groups(columns: list[str]) -> dict[str, list[str]]:
 
 KNOWN_FUTURE_FEATURES = [
     "year", "month", "day", "weekday_num", "quarter",
-    "is_month_start", "is_month_end",
+    "is_month_start", "is_month_end", "week_of_month",
     "event_day", "event_progress", "is_event_start", "is_event_end",
     "is_weekend_in_event",
     "is_holiday_jp", "is_day_before_holiday", "is_day_after_holiday",

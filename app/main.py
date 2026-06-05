@@ -86,4 +86,5 @@ def create_app() -> FastAPI:
     return app
 
 
+# Trigger reload to warm up cache with retrained models
 app = create_app()

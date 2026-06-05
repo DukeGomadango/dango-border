@@ -324,11 +324,18 @@ def _pick_champion(
         ("lightgbm", eval_lgb),
     ]
     adopted = [item for item in candidates if item[1].adopted]
-    if adopted:
-        model_type, evaluation = min(adopted, key=lambda item: item[1].cv_mae)
-        return model_type, evaluation
-    model_type, evaluation = min(candidates, key=lambda item: item[1].cv_mae)
-    return model_type, evaluation
+    if not adopted:
+        # Neither adopted – pick the one with the lower CV MAE anyway
+        return min(candidates, key=lambda item: item[1].cv_mae)
+    if len(adopted) == 1:
+        return adopted[0]
+    # Both adopted: prefer LightGBM unless linear is significantly better (>15%).
+    # Rationale: linear models cannot capture non-linear calendar patterns
+    # (e.g., week-of-month effect) and degrade under recursive forecasting
+    # as lag predictions accumulate errors over longer horizons.
+    if eval_lgb.cv_mae <= eval_linear.cv_mae * 1.15:
+        return "lightgbm", eval_lgb
+    return "linear", eval_linear
 
 
 def _evaluate_with_cv_linear(feature_df: pd.DataFrame) -> EvaluationResult:

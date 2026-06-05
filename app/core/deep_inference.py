@@ -200,6 +200,7 @@ def _build_future_calendar_features(
         "quarter": np.array((dates.month - 1) // 3 + 1, dtype=np.float32),
         "is_month_start": np.array(dates.day == 1, dtype=np.float32),
         "is_month_end": np.array(dates.is_month_end, dtype=np.float32),
+        "week_of_month": ((dates.day - 1) // 7 + 1).astype(np.float32),
         "is_holiday_jp": is_holiday,
         "is_day_before_holiday": np.roll(is_holiday, -1),
         "is_day_after_holiday": np.roll(is_holiday, 1),

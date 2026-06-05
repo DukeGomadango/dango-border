@@ -4,6 +4,8 @@ import { formatVal } from "./format";
 describe("formatVal utility", () => {
   it("should format valid numbers using toLocaleString", () => {
     expect(formatVal(1000)).toBe("1,000");
+    expect(formatVal(1000.4)).toBe("1,000");
+    expect(formatVal(1000.6)).toBe("1,001");
     expect(formatVal(0)).toBe("0");
   });
 
