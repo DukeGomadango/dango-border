@@ -78,6 +78,10 @@ def build_feature_frame(df: pd.DataFrame, target: str, profile: str = "step3", d
     # Gap decay features (step2+ only: requires target series context)
     if profile in ("step2", "step3"):
         _add_gap_decay_features(features, s)
+        features["lag_1_decayed"] = features["lag_1"] * features["decay_weight"]
+        features["lag_7_decayed"] = features["lag_7"] * features["decay_weight"]
+        features["lag_14_decayed"] = features["lag_14"] * features["decay_weight"]
+        features["lag_28_decayed"] = features["lag_28"] * features["decay_weight"]
 
     features["y"] = s
     feature_cols = [c for c in features.columns if c not in ("y", "date")]
@@ -179,11 +183,10 @@ def _add_gap_decay_features(features: pd.DataFrame, target_series: pd.Series) ->
     days_since = np.full(len(features), np.nan)
     last_obs_date = None
     for i in range(len(features)):
+        if last_obs_date is not None:
+            days_since[i] = (dates.iloc[i] - last_obs_date).days
         if has_value.iloc[i]:
             last_obs_date = dates.iloc[i]
-            days_since[i] = 0.0
-        elif last_obs_date is not None:
-            days_since[i] = (dates.iloc[i] - last_obs_date).days
 
     features["days_since_last_obs"] = days_since
     half_life = 7.0

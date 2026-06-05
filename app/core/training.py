@@ -86,6 +86,17 @@ def train_target_model(
     if target not in df.columns:
         raise ValueError(f"Target '{target}' not found in normalized dataset.")
 
+    series = pd.to_numeric(df[target], errors="coerce")
+    missing_rate = float(series.isna().mean())
+    if missing_rate >= 0.30:
+        if strategy == "linear":
+            raise ValueError(
+                f"Target '{target}' has a missing rate of {missing_rate:.2%} (>= 30%) "
+                "and cannot be trained using the linear strategy."
+            )
+        elif strategy == "auto":
+            strategy = "lightgbm"
+
     _ensure_target_allowed(target)
 
     if feature_profile == "auto_steps":
@@ -306,7 +317,8 @@ def _evaluate_strategy(strategy: str, feature_df: pd.DataFrame) -> tuple[str, Ev
 
 
 def _training_frame(df: pd.DataFrame, target: str, profile: str) -> pd.DataFrame:
-    frame = build_feature_frame(df, target, profile=profile)
+    # Set drop_nans=False to keep NaNs for LightGBM
+    frame = build_feature_frame(df, target, profile=profile, drop_nans=False)
     return frame[frame["y"].notna()].reset_index(drop=True)
 
 
@@ -411,10 +423,25 @@ def _evaluate_with_cv(
 def _evaluate_fold_linear(train_df: pd.DataFrame, val_df: pd.DataFrame) -> dict[str, float]:
     x_train, y_train = feature_matrix(train_df)
     x_val, y_val = feature_matrix(val_df)
-    x_train_design = np.hstack([np.ones((len(x_train), 1)), x_train.to_numpy(dtype=float)])
-    coefs, _, _, _ = np.linalg.lstsq(x_train_design, y_train.to_numpy(dtype=float), rcond=None)
-    x_val_design = np.hstack([np.ones((len(x_val), 1)), x_val.to_numpy(dtype=float)])
-    y_pred = x_val_design @ coefs
+
+    # Filter out decay features and fill NaNs for Linear model
+    exclude = {"days_since_last_obs", "decay_weight", 
+               "lag_1_decayed", "lag_7_decayed", "lag_14_decayed", "lag_28_decayed"}
+    linear_cols = [c for c in x_train.columns if c not in exclude]
+    x_train_linear = x_train[linear_cols].ffill().bfill().fillna(0.0).to_numpy(dtype=float)
+    x_val_linear = x_val[linear_cols].ffill().bfill().fillna(0.0).to_numpy(dtype=float)
+
+    # Ridge Regression L2 regularization
+    X_train = np.hstack([np.ones((len(x_train_linear), 1)), x_train_linear])
+    A = X_train.T @ X_train
+    I = np.eye(X_train.shape[1])
+    I[0, 0] = 0.0  # Do not regularize intercept
+    alpha = 1.0    # L2 regularization strength
+    A += alpha * I
+    coefs = np.linalg.solve(A, X_train.T @ y_train.to_numpy(dtype=float))
+
+    X_val = np.hstack([np.ones((len(x_val_linear), 1)), x_val_linear])
+    y_pred = X_val @ coefs
     y_val_arr = y_val.to_numpy(dtype=float)
     return _metrics_from_predictions(y_val_arr, y_pred, val_df)
 
@@ -465,9 +492,22 @@ def _fit_and_serialize(
 ) -> tuple[dict[str, float], dict[str, object]]:
     y = y_series.to_numpy(dtype=float)
     if model_type == "linear":
-        x_design = np.hstack([np.ones((len(x_df), 1)), x_df.to_numpy(dtype=float)])
-        coefs, _, _, _ = np.linalg.lstsq(x_design, y, rcond=None)
-        y_pred = x_design @ coefs
+        # Filter and fill for Linear model
+        exclude = {"days_since_last_obs", "decay_weight", 
+                   "lag_1_decayed", "lag_7_decayed", "lag_14_decayed", "lag_28_decayed"}
+        linear_cols = [c for c in x_df.columns if c not in exclude]
+        x_linear = x_df[linear_cols].ffill().bfill().fillna(0.0).to_numpy(dtype=float)
+
+        # Ridge Regression L2 regularization
+        X = np.hstack([np.ones((len(x_linear), 1)), x_linear])
+        A = X.T @ X
+        I = np.eye(X.shape[1])
+        I[0, 0] = 0.0  # Do not regularize intercept
+        alpha = 1.0    # L2 regularization strength
+        A += alpha * I
+        coefs = np.linalg.solve(A, X.T @ y)
+        y_pred = X @ coefs
+
         return (
             {
                 "mae": round(float(np.mean(np.abs(y - y_pred))), 6),
@@ -476,6 +516,7 @@ def _fit_and_serialize(
             {
                 "intercept": float(coefs[0]),
                 "coefficients": [float(v) for v in coefs[1:]],
+                "feature_columns": linear_cols,
             },
         )
 

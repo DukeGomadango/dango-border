@@ -19,8 +19,6 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copy app code
 COPY app/ ./app
 
-# Copy default model/data storage if exists
-COPY storage/ ./storage
 
 # Create storage directory and ensure correct permissions
 RUN mkdir -p /workspace/storage

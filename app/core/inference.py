@@ -98,9 +98,10 @@ def predict_for_date_range(target: str, from_date: str, to_date: str) -> dict[st
     # Retrieve the raw feature frame from cache to avoid rebuilding it from scratch (~50ms -> ~0ms)
     feature_df = _cached_feature_frame_raw(target, profile).copy()
     feature_cols = artifact["feature_columns"]
-    # Safely impute historical NaNs for all feature columns (especially critical for linear models)
-    feature_df[feature_cols] = feature_df[feature_cols].ffill().bfill().fillna(0.0)
     model_type = artifact.get("model_type", "linear")
+    # Safely impute historical NaNs for all feature columns ONLY for linear models
+    if model_type == "linear":
+        feature_df[feature_cols] = feature_df[feature_cols].ffill().bfill().fillna(0.0)
 
     # Pre-load booster or coefficients once
     if model_type == "lightgbm":
@@ -162,8 +163,19 @@ def predict_for_date_range(target: str, from_date: str, to_date: str) -> dict[st
             x_row["days_since_last_obs"] = float(days_since)
             x_row["decay_weight"] = np.exp(-np.log(2) * float(days_since) / 7.0)
 
-            # Handle potential NaNs safely
-            x_row = x_row.fillna(0.0)
+            # Update decay-multiplied lags
+            if "lag_1_decayed" in x_row:
+                x_row["lag_1_decayed"] = x_row["lag_1"] * x_row["decay_weight"]
+            if "lag_7_decayed" in x_row:
+                x_row["lag_7_decayed"] = x_row["lag_7"] * x_row["decay_weight"]
+            if "lag_14_decayed" in x_row:
+                x_row["lag_14_decayed"] = x_row["lag_14"] * x_row["decay_weight"]
+            if "lag_28_decayed" in x_row:
+                x_row["lag_28_decayed"] = x_row["lag_28"] * x_row["decay_weight"]
+
+            # Handle potential NaNs safely (only for linear models)
+            if model_type == "linear":
+                x_row = x_row.fillna(0.0)
 
             x = x_row[feature_cols].to_frame().T.astype(float)
 
@@ -206,12 +218,17 @@ def predict_for_date_range(target: str, from_date: str, to_date: str) -> dict[st
                 p50 = float((x_design @ coefs).item())
 
             p10, p90 = _prediction_interval(p50, artifact)
+            # Clip predictions and intervals to be non-negative
+            p50_clipped = max(0.0, p50)
+            p10_clipped = max(0.0, p10)
+            p90_clipped = max(0.0, p90)
+            
             evaluation = model_entry.get("evaluation", {})
             predictions.append({
                 "target": target,
                 "date": date,
-                "prediction": round(p50, 2),
-                "interval": {"p10": round(p10, 2), "p50": round(p50, 2), "p90": round(p90, 2)},
+                "prediction": round(p50_clipped, 2),
+                "interval": {"p10": round(p10_clipped, 2), "p50": round(p50_clipped, 2), "p90": round(p90_clipped, 2)},
                 "model_version": model_entry["model_version"],
                 "model_type": model_type,
                 "quality_status": "ok" if evaluation.get("adopted", True) else "degraded",
