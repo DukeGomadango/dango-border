@@ -549,6 +549,8 @@ def _fit_and_serialize(
         y_pred = booster.predict(x_df)
 
     booster.save_model(str(model_path))
+    from app.core.r2 import upload_to_r2
+    upload_to_r2(model_path)
     return (
         {
             "mae": round(float(np.mean(np.abs(y - y_pred))), 6),

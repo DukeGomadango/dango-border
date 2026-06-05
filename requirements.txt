@@ -8,4 +8,6 @@ holidays
 torch
 scikit-learn
 optuna
+boto3
+
 

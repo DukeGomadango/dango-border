@@ -366,6 +366,8 @@ def train_deep_model(
 
     model_path = artifact_dir / f"{model_version}.pt"
     torch.save(model.state_dict(), str(model_path))
+    from app.core.r2 import upload_to_r2
+    upload_to_r2(model_path)
 
     # Save artifact metadata
     artifact = {

@@ -17,6 +17,8 @@ def utc_now_iso() -> str:
 
 def write_json(path: Path, data: dict[str, Any]) -> None:
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    from app.core.r2 import upload_to_r2
+    upload_to_r2(path)
 
 
 def read_json(path: Path) -> dict[str, Any]:
@@ -28,4 +30,6 @@ def append_audit_log(event: dict[str, Any]) -> None:
     line = json.dumps(event, ensure_ascii=False)
     with log_path.open("a", encoding="utf-8") as f:
         f.write(line + "\n")
+    from app.core.r2 import upload_to_r2
+    upload_to_r2(log_path)
 

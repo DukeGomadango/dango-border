@@ -59,6 +59,8 @@ def _simulate_pipeline(job_id: str) -> None:
         dataset_path = Path(job["dataset_path"])
         normalized_path = JOBS_DIR / f"{job_id}_normalized.csv"
         result = normalize_raw_dataset(dataset_path, normalized_path)
+        from app.core.r2 import upload_to_r2
+        upload_to_r2(normalized_path)
         target_update = rebuild_targets_registry(normalized_path)
         baseline_path = _latest_completed_normalized_path(exclude_job_id=job_id)
         quality_result = evaluate_quality_gate(normalized_path, baseline_path=baseline_path)
@@ -144,6 +146,9 @@ async def upload_dataset(background_tasks: BackgroundTasks, file: UploadFile = F
         size = await _save_upload_file(file, destination)
     finally:
         await file.close()
+
+    from app.core.r2 import upload_to_r2
+    upload_to_r2(destination)
 
     now = utc_now_iso()
     job = {

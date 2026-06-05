@@ -15,6 +15,7 @@ from app.api.predictions import router as predictions_router
 from app.api.system import router as system_router
 from app.core.model_cache import warm_up_all_models, warm_up_lgbm_models, warm_up_prediction_caches
 from app.core.storage import ensure_storage_dirs
+from app.core.r2 import download_from_r2
 
 
 @asynccontextmanager
@@ -27,6 +28,7 @@ async def lifespan(app: FastAPI):
     3. Prediction caches  (feature frames for all tiers — heaviest step)
     """
     ensure_storage_dirs()
+    download_from_r2()
     warm_up_lgbm_models()
     warm_up_all_models()
     warm_up_prediction_caches()
