@@ -18,7 +18,7 @@ import lightgbm as lgb
 import torch
 
 from app.core.deep_models import BorderTFT, ModelConfig
-from app.core.settings import MODELS_DIR
+from app.core.settings import MODELS_DIR, resolve_model_path
 from app.core.storage import read_json
 from app.core.training import target_to_slug
 
@@ -94,7 +94,7 @@ def _build_model(artifact: dict[str, object]) -> BorderTFT:
         n_tiers=cfg["n_tiers"],
     )
     model = BorderTFT(config)
-    model_path = artifact["model_path"]
+    model_path = resolve_model_path(artifact["model_path"])
     state_dict = torch.load(model_path, map_location="cpu", weights_only=True)
     model.load_state_dict(state_dict)
     model.eval()
@@ -196,11 +196,14 @@ def _load_lgbm_from_artifact_path(artifact_path_str: str) -> tuple[str, lgb.Boos
         artifact = _cached_read_json(artifact_path_str)
         if artifact.get("model_type") != "lightgbm":
             return None
-        model_path = artifact.get("model_path")
-        if not model_path or not Path(str(model_path)).exists():
+        model_path_raw = artifact.get("model_path")
+        if not model_path_raw:
             return None
-        booster = lgb.Booster(model_file=str(model_path))
-        return str(model_path), booster
+        model_path = resolve_model_path(str(model_path_raw))
+        if not Path(model_path).exists():
+            return None
+        booster = lgb.Booster(model_file=model_path)
+        return model_path, booster
     except Exception:
         logger.exception("Failed to load LightGBM booster from %s.", artifact_path_str)
         return None

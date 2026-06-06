@@ -7,7 +7,7 @@ import pandas as pd
 
 from app.core.availability import get_prediction_date_range
 from app.core.features import build_feature_frame, normalize_profile
-from app.core.settings import MAX_PREDICTION_RANGE_DAYS
+from app.core.settings import MAX_PREDICTION_RANGE_DAYS, resolve_model_path
 from app.core.storage import read_json
 from app.core.targets import TARGETS_PATH
 from app.core.training import _latest_usable_normalized_path, get_current_model
@@ -106,7 +106,7 @@ def predict_for_date_range(target: str, from_date: str, to_date: str) -> dict[st
     # Pre-load booster or coefficients once
     if model_type == "lightgbm":
         from app.core.model_cache import get_cached_lgbm_booster
-        booster = get_cached_lgbm_booster(artifact["model_path"])
+        booster = get_cached_lgbm_booster(resolve_model_path(artifact["model_path"]))
         num_iteration = artifact.get("best_iteration")
     else:
         booster = None

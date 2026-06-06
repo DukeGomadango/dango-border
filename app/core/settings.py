@@ -29,3 +29,26 @@ MAX_UPLOAD_SIZE_BYTES = 50 * 1024 * 1024  # 50MB
 FUTURE_PREDICTION_DAYS = 30
 MAX_PREDICTION_RANGE_DAYS = 90
 
+
+def resolve_model_path(path_str: str) -> str:
+    """モデルパスをOSをまたいで現在環境のBASE_DIRに解決する。
+
+    ローカル（Windows）で学習したモデルのartifact JSONには
+    ``C:\\Users\\furup\\...`` のような絶対パスが埋め込まれている。
+    本番環境（Linux）ではそのパスが存在しないため、
+    ``storage/models/`` または ``storage/jobs/`` 以降の相対部分を
+    現在プロセスの BASE_DIR に接合して正しいパスを返す。
+
+    Args:
+        path_str: artifact JSON 内の ``model_path`` 値。
+
+    Returns:
+        現在環境で有効な絶対パス文字列。
+    """
+    normalized = path_str.replace("\\", "/")
+    for prefix in ("storage/models/", "storage/jobs/"):
+        if prefix in normalized:
+            idx = normalized.find(prefix)
+            return str(BASE_DIR / normalized[idx:])
+    return path_str
+

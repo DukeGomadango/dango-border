@@ -19,7 +19,7 @@ import torch
 
 from app.core.deep_models import BorderTFT, ModelConfig
 from app.core.deep_training import KNOWN_FUTURE_FEATURES, _discover_target_groups
-from app.core.settings import MODELS_DIR, STORAGE_DIR
+from app.core.settings import MODELS_DIR, STORAGE_DIR, resolve_model_path
 from app.core.storage import read_json
 from app.core.training import _latest_usable_normalized_path, target_to_slug
 
@@ -277,7 +277,7 @@ def _load_model(artifact: dict[str, object]) -> BorderTFT:
     )
     model = BorderTFT(config)
 
-    model_path = artifact["model_path"]
+    model_path = resolve_model_path(artifact["model_path"])
     state_dict = torch.load(model_path, map_location="cpu", weights_only=True)
     model.load_state_dict(state_dict)
     return model
